@@ -37,6 +37,9 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from .eventstransforms import *  # register custom events transforms in neuralset
+from .feature_extractors import EfficientVJEPA2Video  # register the opt-in extractor
+from .text_features import EfficientHuggingFaceText  # register the opt-in extractor
+from .audio_features import EfficientWav2VecBert  # register the opt-in extractor
 from .model import *  # register custom models in neuraltrain
 from .studies import *  # register studies
 from .utils import (

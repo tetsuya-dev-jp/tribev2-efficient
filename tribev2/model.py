@@ -100,6 +100,7 @@ class FmriEncoderModel(nn.Module):
         self.feature_dims = feature_dims
         self.n_outputs = n_outputs
         self.n_output_timesteps = n_output_timesteps
+        self._inference_optimized = False
         self.projectors = nn.ModuleDict()
         self.pooler = nn.AdaptiveAvgPool1d(n_output_timesteps)
         hidden = config.hidden
@@ -161,13 +162,14 @@ class FmriEncoderModel(nn.Module):
         return next(self.parameters()).device
 
     def forward(self, batch: SegmentData, pool_outputs: bool = True) -> torch.Tensor:
-        x = self.aggregate_features(batch)  # B, T, H
-        subject_id = batch.data.get("subject_id", None)
-        if hasattr(self, "temporal_smoothing"):
-            x = self.temporal_smoothing(x.transpose(1, 2)).transpose(1, 2)
-        if not self.config.linear_baseline:
-            x = self.transformer_forward(x, subject_id)
+        x, subject_id = self.encode(batch)  # B, T, H
         x = x.transpose(1, 2)  # B, H, T
+        if self._inference_optimized:
+            # The fused readout is a per-timestep affine map, so pooling the
+            # hidden states before it is equivalent to pooling its outputs.
+            if pool_outputs:
+                x = self.pooler(x)
+            return self.predictor(x, subject_id)
         if self.config.low_rank_head is not None:
             x = self.low_rank_head(x.transpose(1, 2)).transpose(1, 2)
         x = self.predictor(x, subject_id)  # B, O, T
@@ -176,6 +178,102 @@ class FmriEncoderModel(nn.Module):
         else:
             out = x
         return out
+
+    def encode(self, batch: SegmentData) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Run the feature projectors and optional transformer up to hidden states."""
+        x = self.aggregate_features(batch)  # B, T, H
+        subject_id = batch.data.get("subject_id", None)
+        if hasattr(self, "temporal_smoothing"):
+            x = self.temporal_smoothing(x.transpose(1, 2)).transpose(1, 2)
+        if not self.config.linear_baseline:
+            x = self.transformer_forward(x, subject_id)
+        return x, subject_id
+
+    def optimize_for_inference(self) -> "FmriEncoderModel":
+        """Fuse the average-subject readout for inference.
+
+        The low-rank head and the shared average-subject affine head are
+        composed into a single linear map, so the intermediate low-rank
+        activations are no longer materialized.  Because that map is applied
+        per timestep, the hidden states can be pooled before the readout.
+
+        This is an explicit, one-way conversion: the model must be in eval
+        mode, the predictor must use the average-subject head, and training is
+        not supported afterwards.  The original forward path and state dict
+        are left untouched unless this method is called.
+
+        The converted state dict has different keys and shapes from the
+        original checkpoint and cannot be loaded with the original config.
+        To obtain a converted model later, reload the original checkpoint and
+        call this method again.
+        """
+        if self._inference_optimized:
+            return self
+        if self.training:
+            raise RuntimeError(
+                "optimize_for_inference() requires the model to be in eval mode."
+            )
+        predictor = self.predictor
+        if not isinstance(predictor, SubjectLayersModel):
+            raise TypeError(
+                "optimize_for_inference() requires a SubjectLayersModel predictor."
+            )
+        if not predictor.average_subjects:
+            raise RuntimeError(
+                "optimize_for_inference() requires an average-subject predictor."
+            )
+        if not predictor.subject_dropout:
+            raise RuntimeError(
+                "optimize_for_inference() requires subject_dropout to be set "
+                "for an average-subject predictor."
+            )
+
+        shared_index = predictor.n_subjects
+        device = predictor.weights.device
+        dtype = predictor.weights.dtype
+        with torch.no_grad():
+            weights = predictor.weights[shared_index].detach()
+            if self.config.low_rank_head is not None:
+                low_rank = self.low_rank_head
+                if not isinstance(low_rank, nn.Linear):
+                    raise TypeError(
+                        "optimize_for_inference() requires an nn.Linear low_rank_head."
+                    )
+                if low_rank.bias is not None:
+                    raise RuntimeError(
+                        "optimize_for_inference() does not support a low-rank bias."
+                    )
+                # float64 on CPU keeps the weight composition accurate without
+                # allocating a float64 matrix on the accelerator.
+                fused = (
+                    low_rank.weight.detach().to(device="cpu", dtype=torch.float64).T
+                    @ weights.to(device="cpu", dtype=torch.float64)
+                )
+                weights = fused.to(device=device, dtype=dtype)
+            else:
+                # Avoid keeping the full per-subject storage alive through a view.
+                weights = weights.clone()
+            predictor.weights = nn.Parameter(
+                weights.unsqueeze(0), requires_grad=False
+            )
+            if predictor.bias is not None:
+                predictor.bias = nn.Parameter(
+                    predictor.bias[shared_index].detach().unsqueeze(0).clone(),
+                    requires_grad=False,
+                )
+            predictor.n_subjects = 0
+            if self.config.low_rank_head is not None:
+                self.low_rank_head = nn.Identity()
+        self._inference_optimized = True
+        return self
+
+    def train(self, mode: bool = True):
+        if mode and self._inference_optimized:
+            raise RuntimeError(
+                "Training is not supported after optimize_for_inference(); "
+                "reload the original checkpoint to train."
+            )
+        return super().train(mode)
 
     def aggregate_features(self, batch):
         tensors = []

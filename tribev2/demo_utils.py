@@ -156,6 +156,7 @@ class TribeModel(TribeExperiment):
         cluster: str = None,
         device: str = "auto",
         config_update: dict | None = None,
+        optimize: bool = False,
     ) -> "TribeModel":
         """Load a trained model from a checkpoint directory or HuggingFace Hub repo.
 
@@ -181,6 +182,13 @@ class TribeModel(TribeExperiment):
         config_update:
             Optional dictionary of config overrides applied after the
             YAML config is loaded.
+        optimize:
+            If ``True``, fuse the low-rank and average-subject readout
+            weights for inference and pool the hidden states before the
+            readout.  Requires an average-subject checkpoint and eval
+            mode.  Defaults to ``False``.  The converted model's state
+            dict cannot be loaded with the original config; reload the
+            original checkpoint and convert again instead.
 
         Returns
         -------
@@ -235,8 +243,10 @@ class TribeModel(TribeExperiment):
         model = xp.brain_model_config.build(**build_args)
         model.load_state_dict(state_dict, strict=True, assign=True)
         del state_dict
-        model.to(device)
         model.eval()
+        if optimize:
+            model.optimize_for_inference()
+        model.to(device)
         xp._model = model
         return xp
 
