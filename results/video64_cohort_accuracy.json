@@ -1,0 +1,108 @@
+{
+  "status": "passed",
+  "n_subjects": 168,
+  "n_movies": 4,
+  "expected_comparisons": 672,
+  "n_comparisons": 672,
+  "gates": {
+    "abs_mean_parcel_r_delta_le": 0.0001,
+    "max_abs_parcel_r_delta_le": 0.001,
+    "abs_relative_mse_change_le": 0.001
+  },
+  "eval_lag": -5,
+  "scope": "existing_cached_subjects_regression_not_independently_heldout",
+  "note": "All subject/movie pairs use unchanged engineering margins; only movie aggregates are public.",
+  "quantile_probabilities": [
+    0,
+    0.05,
+    0.25,
+    0.5,
+    0.75,
+    0.95,
+    1
+  ],
+  "runs": [
+    {
+      "run": "MOVIE1_CC1",
+      "n_subjects": 168,
+      "baseline_mean_parcel_r": 0.20730893215485896,
+      "candidate_mean_parcel_r": 0.20729791646176116,
+      "mean_parcel_r_delta": -1.1015693097751178e-05,
+      "max_abs_subject_mean_r_delta": 6.514746763608414e-05,
+      "max_abs_parcel_r_delta": 0.000708417213135748,
+      "max_abs_relative_mse_change": 2.2050441347401727e-05,
+      "subject_mean_r_delta_quantiles": [
+        -6.514746763608414e-05,
+        -4.679955576827322e-05,
+        -2.4259689974159837e-05,
+        -1.1332218211909661e-05,
+        1.7803341623642832e-06,
+        2.4893699651592355e-05,
+        5.266286849175961e-05
+      ],
+      "n_failed_subjects": 0
+    },
+    {
+      "run": "MOVIE2_HO1",
+      "n_subjects": 168,
+      "baseline_mean_parcel_r": 0.22732726537613304,
+      "candidate_mean_parcel_r": 0.22732224998666678,
+      "mean_parcel_r_delta": -5.01538946624799e-06,
+      "max_abs_subject_mean_r_delta": 6.31902869338008e-05,
+      "max_abs_parcel_r_delta": 0.0004205836789733519,
+      "max_abs_relative_mse_change": 1.6479408015444957e-05,
+      "subject_mean_r_delta_quantiles": [
+        -4.1821620246629276e-05,
+        -2.8921484063954007e-05,
+        -1.5574877904725448e-05,
+        -6.78040687279724e-06,
+        2.0662121718237336e-06,
+        2.4889824134405327e-05,
+        6.31902869338008e-05
+      ],
+      "n_failed_subjects": 0
+    },
+    {
+      "run": "MOVIE3_CC2",
+      "n_subjects": 168,
+      "baseline_mean_parcel_r": 0.20701798931691145,
+      "candidate_mean_parcel_r": 0.20700944783019173,
+      "mean_parcel_r_delta": -8.541486719758823e-06,
+      "max_abs_subject_mean_r_delta": 5.4556823793664236e-05,
+      "max_abs_parcel_r_delta": 0.0007880643406791982,
+      "max_abs_relative_mse_change": 3.186376308056061e-05,
+      "subject_mean_r_delta_quantiles": [
+        -5.2474212465430936e-05,
+        -4.0181431750280215e-05,
+        -2.4320425190758888e-05,
+        -9.358822072119688e-06,
+        5.069118308491383e-06,
+        2.9084937491652422e-05,
+        5.4556823793664236e-05
+      ],
+      "n_failed_subjects": 0
+    },
+    {
+      "run": "MOVIE4_HO2",
+      "n_subjects": 168,
+      "baseline_mean_parcel_r": 0.24067895032327952,
+      "candidate_mean_parcel_r": 0.24067975523968452,
+      "mean_parcel_r_delta": 8.049164049867823e-07,
+      "max_abs_subject_mean_r_delta": 3.249925732015657e-05,
+      "max_abs_parcel_r_delta": 0.00042276165689092426,
+      "max_abs_relative_mse_change": 1.5838274736434445e-05,
+      "subject_mean_r_delta_quantiles": [
+        -3.249925732015657e-05,
+        -1.8430727797834336e-05,
+        -9.003057500331368e-06,
+        7.094081008046649e-07,
+        1.0006155341236306e-05,
+        2.215609631941312e-05,
+        2.6907925499447538e-05
+      ],
+      "n_failed_subjects": 0
+    }
+  ],
+  "frames_per_clip": 64,
+  "n_failed_comparisons": 0
+}

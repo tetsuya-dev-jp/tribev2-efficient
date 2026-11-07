@@ -1,0 +1,15 @@
+{
+  "status": "passed",
+  "scope": "Public TribeModel.predict from fresh video/audio and existing word contexts; ASR excluded; integration, not a timing benchmark",
+  "duration_s": 4,
+  "n_words": 3,
+  "frames_per_clip": 64,
+  "video_compute_dtype": "float16",
+  "prediction_shape": [
+    4,
+    20484
+  ],
+  "segments": 4,
+  "finite": true,
+  "peak_allocated_bytes": 7289803776
+}

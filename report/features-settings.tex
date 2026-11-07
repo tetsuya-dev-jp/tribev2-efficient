@@ -1,0 +1,62 @@
+\section{Recorded settings}
+Tables~\ref{tab:feature-settings}--\ref{tab:score-settings} summarize the executed
+conditions. There is no optimizer, learning rate, training split, or training
+stopping rule: this study does not train weights. The stimulus samples are
+engineering regression inputs, and no independent confirmatory population was
+introduced for the existing 168-subject cache. Private paths and participant identifiers are omitted.
+
+\begin{table}[htbp]\centering\sffamily\small
+\caption{Feature-extraction settings and verification sources}
+\label{tab:feature-settings}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{.21\linewidth}>{\raggedright\arraybackslash}p{.49\linewidth}>{\raggedright\arraybackslash}p{.24\linewidth}@{}}\toprule
+Item & Executed value & Source \\\midrule
+Video encoder & V-JEPA 2 ViT-g; 40 layers; width 1408; 64 frames; 256-pixel crop & Loaded model/config \\
+Video outputs & 2 Hz; 4-second causal window; mean tokens; 20 cached states & Checkpoint config; extractor \\
+Video precision & Reference/rewrite FP32; separate candidate FP16 with FP32 token means & Extractor; result JSON \\
+Audio encoder & Wav2Vec2-BERT 2.0; width 1024; FP32; 16 kHz input; 2 Hz output & Model and extractor \\
+Audio preprocessing & Original normalization and nearest interpolation; all 25 states retained & Neuralset; regression tests \\
+Text encoder & Llama-3.2-3B; width 3072; BF16; four words per batch; 20 cached states & Loaded model; benchmark \\
+Text contexts & Existing word contexts; context transform maximum length 1024; original tokenizer truncation & Events pipeline; benchmark \\
+Layer groups & Original group means with boundaries 0.5, 0.75, 1.0 & Released checkpoint config \\
+Feature gate & $|\widehat{x}-x|\leq10^{-5}+10^{-4}|x|$; finite values; identical shape and timing & Benchmark implementation \\
+Video samples & Four 4-second events; offsets 120/300/480/660 s; 32 clips total. Prefetch pairs: one 60-s event at 120 s (120 clips) & Selection in result JSON \\
+Text/audio samples & 128 words (two 16-word blocks/movie); four 60-second audio events & Selection in result JSON \\
+Timing & Two short-workload repetitions/condition; alternating original/rewrite order; FP16 timed separately; three paired 60-s prefetch comparisons & Recorded run order \\
+Timing scope & Cache bypassed; video includes model load; text/audio exclude model load; ASR excluded & Benchmark implementation \\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[htbp]\centering\sffamily\small
+\caption{Runtime and source revisions}
+\label{tab:runtime-settings}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{.21\linewidth}>{\raggedright\arraybackslash}p{.49\linewidth}>{\raggedright\arraybackslash}p{.24\linewidth}@{}}\toprule
+Item & Executed value & Source \\\midrule
+Hardware & AMD Radeon RX 9070 XT, 16 GiB; Intel Core i5-13500 & Local runtime inventory \\
+Software & Python 3.12.15; Torch 2.12.0+rocm7.14.0; HIP 7.14.60850; torchvision 0.27.0+rocm7.14.0 & Installed runtime \\
+Dependencies & Transformers 5.14.1; neuralset/neuraltrain 0.0.2; Exca 0.5.20 & Installed runtime \\
+CPU threads & OMP\_NUM\_THREADS=4; MKL\_NUM\_THREADS=4 & Launch environment \\
+Compatibility & CPU Torch 2.6.0 with shared non-Torch dependencies; no clean-install claim & Separate test environment \\
+Upstream TRIBE & \texttt{af58661791a35} & Git base revision \\
+Implementation & \texttt{94ace50}: full 64-frame run; \texttt{63d759b}: audio lifetime and validation; \texttt{932e7fb}: cohort checks; \texttt{2ea6ccb}: prefetch & Local Git revisions \\
+Brain checkpoint & \texttt{f894e78302094} & Local Hub snapshot \\
+Video revision & \texttt{875c192b7b704} & Loaded model in cache spot check \\
+Audio config revision & \texttt{da985ba0987f7} & Separately resolved config \\
+Text config revision & \texttt{13afe5124825b} & Separately resolved config \\
+\bottomrule\end{tabular}\end{table}
+
+\begin{table}[htbp]\centering\sffamily\small
+\caption{Approximate-video prediction regression protocol}
+\label{tab:score-settings}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{.21\linewidth}>{\raggedright\arraybackslash}p{.49\linewidth}>{\raggedright\arraybackslash}p{.24\linewidth}@{}}\toprule
+Item & Executed value & Source \\\midrule
+Evaluation scope & Initial one-subject check; then 168 existing subjects, four HCP movies (672 pairs); no retraining; video alone replaced & Evaluation scripts and cache inventory \\
+Original event grid & 15 events/movie; 60 total; original offsets/durations, including unequal tails & Original event table \\
+Readout inputs & 40 windows of 100 s; video shape $(1,2,1408,200)$; unchanged text/audio & Frozen batches and metadata \\
+Alignment check & All 40 original cache windows bitwise equal to frozen batches & Evaluation assertion \\
+Cache provenance & Current original FP32 matches 16 historical-cache timestamps bitwise; spot check only & Cache-validation JSON \\
+Time alignment & Canonical lag $-5$; valid lengths 921/918/915/901 before lag trimming & Canonical score implementation \\
+Correlation & Pearson $r$ of mean prediction/recording per parcel; 360 parcels & Score implementation and tests \\
+MSE & Mean squared prediction error over labeled vertices and aligned timepoints & Score implementation \\
+Fixed margins & Per subject/movie pair: absolute mean $r$ change $\leq10^{-4}$; max parcel change $\leq10^{-3}$; absolute relative MSE change $\leq10^{-3}$ & Protocol fixed before candidate scores \\
+Inference model & Original unfused average-subject brain model in both conditions & Evaluation script \\
+\bottomrule\end{tabular}\end{table}
+\clearpage

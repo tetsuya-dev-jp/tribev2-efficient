@@ -1,0 +1,191 @@
+{
+  "status": "measured",
+  "modality": "video",
+  "num_frames": 64,
+  "torch": "2.12.0+rocm7.14.0",
+  "hip": "7.14.60850",
+  "transformers": "5.14.1",
+  "neuralset": "0.0.2",
+  "device": "AMD Radeon RX 9070 XT",
+  "model": "facebook/vjepa2-vitg-fpc64-256",
+  "model_dtype": "torch.float16",
+  "mean_dtype": "torch.float32",
+  "selection": [
+    {
+      "movie_ordinal": 0,
+      "offset_s": 120.0,
+      "duration_s": 60
+    }
+  ],
+  "cache_bypassed": true,
+  "model_load_in_timing": true,
+  "baseline_mode": "serial_deferred_cpu_reads",
+  "candidate_mode": "production_single_window_prefetch",
+  "criterion": "finite bitwise equality in all 3 pairs and candidate median <= 0.95 baseline",
+  "runs": [
+    {
+      "repeat": 0,
+      "condition": "baseline",
+      "wall_s": 74.33389133296441,
+      "peak_allocated_bytes": 2423793152,
+      "shapes": [
+        [
+          20,
+          1408,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    },
+    {
+      "repeat": 0,
+      "condition": "candidate",
+      "wall_s": 69.81399458704982,
+      "peak_allocated_bytes": 2423793152,
+      "shapes": [
+        [
+          20,
+          1408,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "condition": "candidate",
+      "wall_s": 69.89884675794747,
+      "peak_allocated_bytes": 2423793152,
+      "shapes": [
+        [
+          20,
+          1408,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "condition": "baseline",
+      "wall_s": 75.73573766602203,
+      "peak_allocated_bytes": 2423793152,
+      "shapes": [
+        [
+          20,
+          1408,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "condition": "baseline",
+      "wall_s": 75.50264116807375,
+      "peak_allocated_bytes": 2423793152,
+      "shapes": [
+        [
+          20,
+          1408,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    },
+    {
+      "repeat": 2,
+      "condition": "candidate",
+      "wall_s": 70.28211274498608,
+      "peak_allocated_bytes": 2423793152,
+      "shapes": [
+        [
+          20,
+          1408,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "repeat": 0,
+      "passed": true,
+      "finite": true,
+      "bitwise_equal": true,
+      "max_abs": 0.0,
+      "rms_error": 0.0,
+      "failed_elements": 0,
+      "compared_elements": 3379200,
+      "rtol": 0.0001,
+      "atol": 1e-05
+    },
+    {
+      "repeat": 1,
+      "passed": true,
+      "finite": true,
+      "bitwise_equal": true,
+      "max_abs": 0.0,
+      "rms_error": 0.0,
+      "failed_elements": 0,
+      "compared_elements": 3379200,
+      "rtol": 0.0001,
+      "atol": 1e-05
+    },
+    {
+      "repeat": 2,
+      "passed": true,
+      "finite": true,
+      "bitwise_equal": true,
+      "max_abs": 0.0,
+      "rms_error": 0.0,
+      "failed_elements": 0,
+      "compared_elements": 3379200,
+      "rtol": 0.0001,
+      "atol": 1e-05
+    }
+  ],
+  "ratio_of_median_times": 0.9257801538670432,
+  "median_times_s": {
+    "baseline": 75.50264116807375,
+    "candidate": 69.89884675794747
+  },
+  "accepted": true
+}

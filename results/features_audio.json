@@ -1,0 +1,291 @@
+{
+  "status": "passed",
+  "modality": "audio",
+  "torch": "2.12.0+rocm7.14.0",
+  "hip": "7.14.60850",
+  "transformers": "5.14.1",
+  "neuralset": "0.0.2",
+  "device": "AMD Radeon RX 9070 XT",
+  "model": "facebook/w2v-bert-2.0",
+  "separately_resolved_config_revision": "da985ba0987f70aaeb84a80f2851cfac8c697a7b",
+  "model_dtype": "torch.float32",
+  "selection": [
+    {
+      "movie_ordinal": 0,
+      "event_index": 2,
+      "duration_s": 60.0
+    },
+    {
+      "movie_ordinal": 1,
+      "event_index": 2,
+      "duration_s": 60.0
+    },
+    {
+      "movie_ordinal": 2,
+      "event_index": 2,
+      "duration_s": 60.0
+    },
+    {
+      "movie_ordinal": 3,
+      "event_index": 2,
+      "duration_s": 60.0
+    }
+  ],
+  "model_load_in_timing": false,
+  "separate_model_load_s": 1.591386366984807,
+  "cache_bypassed": true,
+  "warmup": {
+    "baseline": {
+      "wall_s": 3.1761281890794635,
+      "peak_allocated_bytes": 8014798336,
+      "shapes": [
+        [
+          25,
+          1024,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    },
+    "optimized": {
+      "wall_s": 1.0254614549921826,
+      "peak_allocated_bytes": 8014798336,
+      "shapes": [
+        [
+          25,
+          1024,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    }
+  },
+  "runs": [
+    {
+      "repeat": 0,
+      "condition": "baseline",
+      "wall_s": 4.6703810839680955,
+      "peak_allocated_bytes": 8014798336,
+      "shapes": [
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    },
+    {
+      "repeat": 0,
+      "condition": "optimized",
+      "wall_s": 4.080636137980036,
+      "peak_allocated_bytes": 8014798336,
+      "shapes": [
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "condition": "optimized",
+      "wall_s": 4.0899687689961866,
+      "peak_allocated_bytes": 8014798336,
+      "shapes": [
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    },
+    {
+      "repeat": 1,
+      "condition": "baseline",
+      "wall_s": 4.605218058102764,
+      "peak_allocated_bytes": 8014798336,
+      "shapes": [
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ],
+        [
+          25,
+          1024,
+          120
+        ]
+      ],
+      "output_dtype": "float32",
+      "output_timing": [
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        },
+        {
+          "frequency": 2.0,
+          "duration": 60.0
+        }
+      ]
+    }
+  ],
+  "comparisons": [
+    {
+      "repeat": 0,
+      "passed": true,
+      "finite": true,
+      "bitwise_equal": true,
+      "max_abs": 0.0,
+      "rms_error": 0.0,
+      "failed_elements": 0,
+      "compared_elements": 12288000,
+      "rtol": 0.0001,
+      "atol": 1e-05
+    },
+    {
+      "repeat": 1,
+      "passed": true,
+      "finite": true,
+      "bitwise_equal": true,
+      "max_abs": 0.0,
+      "rms_error": 0.0,
+      "failed_elements": 0,
+      "compared_elements": 12288000,
+      "rtol": 0.0001,
+      "atol": 1e-05
+    }
+  ]
+}

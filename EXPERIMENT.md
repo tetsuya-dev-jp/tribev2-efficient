@@ -1,9 +1,7 @@
 # TRIBE v2 feature-extraction and inference experiments
 
-Status: ongoing. The readout experiment below is complete. The user clarified
-that feature extraction is the actual bottleneck; extraction profiling and
-accuracy-preserving optimization are now the primary objective. Publication
-waits for that work and an updated English report.
+Status: experiments, implementation, report, and verification complete. Feature
+extraction is the primary result; the readout experiment remains secondary.
 
 ## Primary objective: feature extraction
 
@@ -92,8 +90,7 @@ alignment/provenance check.
 
 Exploratory video measurements favor float16 with float32 means: 0.555 s per
 clip versus about 5.95 s for the streamlined float32 encoder, with relative
-feature L2 error `1.61e-4` on one sampled clip. This is a kernel probe, not yet a
-prediction-accuracy result. Larger batches did not improve per-clip time.
+feature L2 error `1.61e-4` on one sampled clip. This single-clip kernel probe does not itself measure prediction accuracy. Larger batches did not improve per-clip time.
 Compilation did not meaningfully accelerate the float16 path and introduced
 additional numerical differences, so eager execution is retained. Reducing
 frames to 32/16 and moving preprocessing to the GPU are separate exploratory
@@ -120,6 +117,30 @@ small because a single FP16 encoder call takes about 0.55 s versus roughly
 0.61 s including processing on steady 60-second events. Keeping processed CPU
 frames in FP16 is lower priority: it saves only about 24 MiB of host cache,
 not the dominant encoder GPU storage, and has not been adopted.
+
+## Final prefetch results
+
+The production implementation passes all three paired 60-second comparisons:
+serial FP16 74.334/75.736/75.503 s versus prefetch 69.814/69.899/70.282 s.
+Median time falls from 75.503 to 69.899 s (7.42%); all 3,379,200 feature values
+per pair are finite and bitwise equal. The baseline defers submitted CPU reads
+until the main thread requests them, preserving serial read/forward order.
+
+On the separate 32-clip short-event workload, final FP16 with prefetch takes
+19.995/20.106 s: median 20.051 s, a 12.07x ratio against the original FP32
+median 242.102 s. Peak allocation remains 2.257 GiB versus 9.468 GiB originally
+(76.16% reduction). Conditions were not interleaved across these two dtypes.
+These short-workload and long-prefetch ratios must not be multiplied.
+
+The 672-pair precision regression was evaluated before prefetch. Its separate
+exact-output check covers 120 clips, not a new full-cohort extraction. The
+public prediction entrypoint also passes a fresh four-second integration check
+with all three extractors and existing word contexts; ASR is excluded.
+
+Verification: 90 full-suite tests pass in each tested Torch environment. Eight
+final report tests, including five new checks, also pass in both environments.
+The production reader owns one CPU worker and joins it before closing each
+video, including on inference errors. No GPU work runs on that worker.
 
 ## Reduced-frame decision
 
@@ -160,7 +181,7 @@ timing. Do not treat a correlation alone as evidence of numerical equivalence.
 - Real inputs: existing frozen HCP movie feature caches, four original-version
   movies. Inputs, recordings, subject identifiers, and checkpoints stay local.
 
-## Candidates and scope
+## Secondary readout candidates and scope
 
 1. Move adaptive temporal averaging before the affine output projection.
    Averaging commutes with an affine map because each output bin has weights

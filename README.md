@@ -66,7 +66,9 @@ pass the fixed downstream prediction margins; this is not feature equality.
 
 - **Video:** remove the unused V-JEPA 2 predictor, retain selected token means
   instead of every hidden state, and cache preprocessed frames at identical
-  timestamps within each event. All 40 encoder layers still run.
+  timestamps within each event. Prepare one CPU window while the current window
+  runs on the GPU; join the reader worker before closing each video. All 40
+  encoder layers still run.
 - **Text:** transfer only the required layers and target-word tokens to the CPU;
   disable the unused generation cache. Preserve the original batching and CPU
   token mean, including its BF16 rounding.
@@ -81,29 +83,41 @@ reduce the model download size. FP16 separately reduces encoder weight storage.
 
 ## Measurements
 
-Results are reported as uncached workload timings, with model loading included for video
-and excluded for text/audio. Transcription is outside these timings. Individual
-repetitions and peak PyTorch tensor allocation are retained in `results/`.
+On an AMD Radeon RX 9070 XT, the final **64-frame FP16 video path with CPU
+prefetch is 12.07x faster** on the measured 32-clip workload: median 242.10 s
+for the original FP32 extractor versus 20.05 s (20.00/20.11 s repetitions).
+Peak PyTorch tensor allocation falls from **9.47 to 2.26 GiB (76.16%)**.
+The FP16 runs were recorded separately from the original FP32 baseline.
 
-The FP32 video rewrite passes the feature tolerance in both alternating-order
-comparisons: 241.81/242.40 s versus 197.04/197.08 s (1.23x). Peak tensor allocation
-decreases from 9.47 to 4.52 GiB. The separate FP16 candidate takes 21.36/21.01 s
-and 2.26 GiB: **11.43x faster and 76.16% less peak allocation** than the original
-FP32 workload. Its prediction regression passes all 672 subject/movie pairs.
+| Workload | Original median | Final median | Speed ratio |
+| --- | ---: | ---: | ---: |
+| Video, 32 clips | 242.10 s | 20.05 s | 12.07x |
+| Text, 128 words | 14.26 s | 6.29 s | 2.27x |
+| Audio, four 60-second events | 4.64 s | 4.09 s | 1.14x |
 
-Text extraction on 128 words is bitwise equal to the original: 13.05/15.48 s
-versus 6.27/6.31 s (two alternating-order repetitions). Its ratio of median
-times is 2.27. Audio extraction on four 60-second events is also bitwise equal:
-4.67/4.61 s versus 4.08/4.09 s (1.14x by the ratio of medians), with the same
-peak tensor allocation in both conditions after the lifetime correction.
+These are separate uncached workloads, not combined pipeline timings. Video
+includes model loading; text/audio exclude loading. Transcription is excluded.
+Text and audio outputs are bitwise equal in both alternating-order comparisons.
+The serial FP32 video rewrite also passes its feature tolerance, using 4.52 GiB
+and taking 197.06 s (1.23x); that result predates CPU prefetch.
 
-Prediction regression checks one initial subject and four movies, then all
-168 subjects with complete existing BOLD caches. Every one of the 672 pairs
-passes the same fixed margins. The largest absolute mean parcel-r change is
-6.51e-5; the largest parcel-r change is 7.88e-4; the largest absolute relative
-vertex-MSE change is 3.19e-5. It does not establish equivalence on an
-independently held-out population or unseen stimuli. The feature gate and prediction margins are specified separately in
-[EXPERIMENT.md](EXPERIMENT.md).
+The FP16 precision change passes all **672 subject/movie pairs across 168
+existing subjects and four movies**. Maximum absolute changes are 6.51e-5 in
+mean parcel r, 7.88e-4 in a parcel r, and 3.19e-5 in relative vertex MSE. Prefetch
+is checked separately: all 3,379,200 feature values match serial FP16 bitwise in
+each of three paired 60-second runs, whose median time falls from 75.50 to
+69.90 s (7.42%). The full cohort was not re-extracted with prefetch. The two
+workload speed ratios are not multiplied.
+
+A 32-frame candidate was rejected: average correlation improved in its first
+movie screen, but one parcel's correlation fell by 0.0419. The fixed regional
+margin was 0.001. The recommended configuration retains 64 frames.
+
+A fresh four-second `TribeModel.predict` integration check with all three
+extractors produced finite `(4, 20484)` predictions using existing word contexts.
+The experiments establish regression behavior on these inputs, not equivalence
+on unseen stimuli or an independently held-out population. See
+[EXPERIMENT.md](EXPERIMENT.md) for the separate feature and prediction gates.
 
 ## Reproduce fresh extraction
 
@@ -114,7 +128,7 @@ movies, audio events, and contextualized words:
 export OMP_NUM_THREADS=4 MKL_NUM_THREADS=4
 python -m benchmarks.benchmark_features \
   --events /path/to/events.parquet --modality video \
-  --repeats 2 --output results/features_video_float32.json \
+  --repeats 2 --output results/features_video_float32_prefetch.json \
   --save-features .work/video-reference.pt
 python -m benchmarks.benchmark_features \
   --events /path/to/events.parquet --modality text \
@@ -124,10 +138,16 @@ python -m benchmarks.benchmark_features \
   --repeats 2 --output results/features_audio.json
 python -m benchmarks.benchmark_video_precision \
   --events /path/to/events.parquet --baseline-features .work/video-reference.pt \
-  --repeats 2 --output results/features_video_float16.json
+  --repeats 2 --output results/features_video_float16_prefetch.json
+python -m benchmarks.benchmark_video_prefetch \
+  --events /path/to/events.parquet --output results/video_prefetch.json
 ```
 
-The FP16 command records timing and feature drift; it does not assert brain
+Historical serial-video results were measured before prefetch (source through
+`cea2496`); the commands above exercise the current implementation. The current
+FP32 run writes a separate file so it cannot overwrite the historical serial
+input used by the report renderer. The FP16
+command records timing and feature drift; it does not assert brain
 accuracy. Run GPU benchmarks sequentially. Full prediction-regression commands
 and the historical-cache validation are in [EXPERIMENT.md](EXPERIMENT.md).
 Stimuli, transcripts, recordings, extracted arrays, and weights are not included.

@@ -1,0 +1,232 @@
+\documentclass[10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,graphicx,array}
+\usepackage[colorlinks=true,linkcolor=blue,urlcolor=blue,citecolor=blue]{hyperref}
+\title{Reducing TRIBE v2 Feature-Extraction Cost\newline with Numerical and Prediction Regression Checks}
+\author{}
+\date{November 8, 2026}
+\begin{document}
+\maketitle
+\begin{abstract}
+TRIBE v2 extracts video, audio, and contextual language representations before
+predicting brain responses. We optimize this extraction stage without retraining,
+changing checkpoints, or reducing input resolution. The video path removes an
+unused predictor, reduces selected hidden states as they are produced, and
+reuses preprocessed frames at identical timestamps. The text path transfers only the
+tokens and layers needed for each target word and disables an unused key--value
+cache. The audio path selects output timestamps before transferring features
+to the CPU. We compare uncached extraction against neuralset 0.0.2 on an AMD
+Radeon RX 9070 XT, with fixed inputs, batch composition, and model dtypes.
+The FP32 video rewrite is 1.23 times faster on the stated short-event workload;
+text and audio are 2.27 and 1.14 times faster with bitwise-equal sampled outputs.
+The final FP16 video path with CPU prefetch is 12.07 times faster than the
+original FP32 path and reduces peak tensor allocation by 76.16\%. A separate
+60-second comparison isolates prefetch: 7.42\% shorter median time and
+bitwise-identical sampled FP16 features across three paired repetitions. The
+FP16 precision change meets prespecified prediction-regression margins in all
+672 comparisons across 168 existing subjects and four movies. These checks do not establish accuracy equivalence on unseen stimuli
+or on an independently held-out population.
+\end{abstract}
+
+\section{Problem and baseline}
+The reported bottleneck in the evaluated TRIBE v2 workflow is stimulus feature extraction,
+not the subsequent brain encoder. This report therefore evaluates fresh extraction
+from local videos, audio, and existing word contexts. Transcription and the brain
+encoder are outside the extraction timings. A separate companion report documents
+an optional affine readout optimization; its millisecond timings must not be
+interpreted as video-processing throughput.
+
+We fix the upstream TRIBE v2 source at
+\texttt{af58661791a35} and use the installed neuralset
+0.0.2 extraction code as the reference~\cite{tribe,neuralset}. Its relevant source files were checked
+against the published 0.0.2 wheel. The released configuration uses
+\texttt{facebook/vjepa2-vitg-fpc64-256}, \texttt{facebook/w2v-bert-2.0}, and
+\texttt{meta-llama/Llama-3.2-3B}. The float32 video/audio and bfloat16 text
+rewrites preserve their weights, preprocessing, time
+sampling, and layer aggregation. Video and audio run in float32; the tested
+Transformers loader chooses bfloat16 for Llama. The language comparison preserves
+that baseline dtype rather than silently promoting or quantizing it.
+We separately evaluate an opt-in video float16 configuration, retaining float32
+token means and the original 64-frame input. Its accuracy comparison uses
+downstream brain predictions rather than requiring identical feature values.
+
+\section{Changes and invariants}
+\subsection{Video: retain summaries, not all token states}
+Each output time uses 64 frames from a four-second causal window, at an output
+rate of 2 Hz. The Hugging Face V-JEPA 2 implementation provides encoder hidden
+states and also runs a predictor by default~\cite{vjepa,hfvideo}. Neuralset consumes only the encoder
+hidden states. We remove the predictor before moving weights to the GPU.
+This removes 22,381,312 of 1,034,555,264 loaded parameters; it does not compress
+the encoder or reduce the original checkpoint's download size.
+
+Let $H_\ell\in\mathbb{R}^{N\times D}$ be one encoder hidden state, with $N$ tokens
+and $D$ channels. The cached feature for a selected layer is
+\begin{equation}
+z_\ell=\frac{1}{N}\sum_{i=1}^{N}H_{\ell,i,:}.
+\end{equation}
+The reference materializes all hidden states, selects layers, then averages
+tokens. We compute each selected $z_\ell$ immediately and release the preceding
+full token state as the next layer runs. All encoder layers and their attention
+operations remain. For the tested checkpoint, $N=8192$ and $D=1408$.
+The hidden-state tuple contains the embedding output followed by 40 layer
+outputs; its last element precedes the encoder's final layer normalization.
+Applying that normalization here would change the representation.
+
+Layer selection still uses the reference's rounded, evenly spaced 20 indices.
+This is algebraically the same mean, although different reduction layouts can
+change floating-point rounding. We therefore check numerical error separately.
+The frame cache retains only the current window and reuses frames at exactly
+equal floating-point timestamps. It neither rounds timestamps nor changes
+clamping at event boundaries. It caches processed CPU tensors, so both decoding
+and preprocessing are avoided for repeated timestamps. In a separate input
+check, ten windows per movie requested 640 frames but only 81 unique timestamps;
+the resulting processed inputs were bitwise identical. The tested videos have
+fixed frame dimensions and use no optional preliminary image-size limit.
+Variable-resolution videos with that optional limit are outside this check.
+The final implementation prepares one upcoming CPU frame window on a worker
+while the current window runs on the GPU. It consumes each future in timestamp
+order and retains at most one pending window. An executor context inside the
+reader cleanup block joins outstanding work before closing the video, including
+on inference errors. This adds bounded CPU lookahead storage; host-memory
+reduction is not claimed.
+
+\subsection{Text: select before transfer}
+The reference transfers hidden states for every layer and every token to the
+CPU before isolating a target word. We keep the same tokenizer, context strings,
+padding, truncation, batch size, and target-token bounds, but transfer only the
+selected layers and target tokens. Token averaging still occurs on the CPU in
+the original dtype, followed by conversion to float32. The model's unused
+generation cache is disabled. We retain the reference's EOS/padding convention
+and truncation behavior, even where a different convention might be preferable
+for a new experiment: this is a regression-preserving implementation change.
+
+\subsection{Audio: select timestamps before transfer}
+The Wav2Vec2-BERT~\cite{hfaudio} audio reference transfers every native-rate hidden state and then uses nearest
+interpolation on the CPU to reach 2 Hz. We apply the same nearest interpolation
+to each hidden state on the GPU and transfer the smaller result. Target length
+comes from the event duration and the original \texttt{Frequency.to\_ind} rule.
+The audio reference retains all 25 layers despite \texttt{cache\_n\_layers=20};
+we preserve this behavior. Selecting 20 layers here would alter the subsequent
+layer groups and invalidate the comparison.
+Native-rate GPU hidden states are released before starting the next event.
+
+All variants use distinct extractor class names and cache namespaces. Existing
+feature caches and default extractors remain available. The optimized paths
+target the released configuration; they reject unsupported modes explicitly.
+
+\section{Evaluation protocol}
+We bypass Exca's automatic feature cache in both conditions and execute actual
+extraction. Video samples are four independent four-second events, one per movie,
+with offsets 120, 300, 480, and 660 seconds. This gives 32 model inputs per pass.
+The first windows clamp to the beginning of each sampled event exactly as in
+the reference. They are not represented as the corresponding full-movie features.
+Text samples cover word positions 100--115 and 800--815 from each movie, preserving
+four-word batches and existing contexts: 128 words in total. Audio samples use
+four 60-second events. These are local HCP stimulus inputs; neither stimuli,
+transcripts, subject data, nor extracted arrays are redistributed.
+
+For the FP32 video rewrite, BF16 text rewrite, and FP32 audio rewrite, we require
+finite outputs, equal shapes and timing metadata, and the elementwise gate
+\begin{equation}
+|\widehat{x}-x|\leq10^{-5}+10^{-4}|x|,
+\end{equation}
+where $x$ is the original feature. This is a numerical regression criterion,
+not a margin for fMRI prediction accuracy. The separate FP16 video candidate
+may fail this feature gate; its acceptance instead requires every downstream
+subject/movie comparison to meet the score margins below. We also report bitwise equality,
+maximum absolute error, and failed-element counts. Tolerances are fixed before
+the final comparison and are not relaxed for a faster candidate.
+
+The benchmark records condition order, individual wall times, initialization
+scope, and peak PyTorch tensor allocation. GPU work is serialized. Peak allocation
+is not total physical VRAM. Small numbers of repeated workloads describe this
+machine and sample set; they do not provide population confidence intervals.
+
+\subsection{Prediction checks across existing subjects}
+The first comparison uses one existing subject to check the full four-movie
+pipeline. An inventory conducted before the candidate scores identified 168
+subjects with all four BOLD caches. We therefore also compare the unchanged
+original and candidate average-subject predictions against every one of those
+672 subject/movie pairs. This does not repeat feature extraction per subject.
+
+For each pair, the absolute mean parcel-correlation change must be at most
+$10^{-4}$, the maximum absolute change over 360 parcel correlations at most
+$10^{-3}$, and the absolute relative labeled-vertex MSE change at most $10^{-3}$.
+These are the same margins fixed for the initial subject; they are not adjusted
+for the cohort. We preserve lag $-5$, trim each movie to its original valid
+length, and use the same canonical scoring implementation. A failed pair
+precludes acceptance. Public cohort results contain movie aggregates, extrema,
+and quantiles; participant identities and individual diagnostics stay private.
+The subjects are existing cached inputs, not a newly held-out population, and
+no statistical equivalence test is claimed.
+
+\section{Measured results}
+\input{features-results.tex}
+
+\section{Candidate decisions and scope}
+Changing precision is a different intervention from removing unused work.
+An exploratory float16 video run was much faster, but failed the feature gate.
+We therefore evaluate it separately against frozen brain-score margins instead
+of describing its features as numerically equivalent. Reusing common causal prefixes
+across language contexts also changed outputs when sequence and batch shapes
+changed; both bfloat16 and float32 probes failed the fixed gate. We retain the
+original batch composition. A separately compiled video encoder passed a
+single-input numerical probe, but its small observed steady-state gain and
+additional compiler/version dependence do not justify a production default.
+
+A 32-frame candidate failed the prespecified first-movie rejection screen.
+Its mean parcel correlation increased by $2.23\times10^{-3}$, while individual
+parcel changes ranged from $-4.19\times10^{-2}$ to $+3.61\times10^{-2}$.
+Thus its aggregate improvement did not preserve regional prediction accuracy.
+We retain 64 frames and do not infer a general failure of reduced-frame models
+from this one-subject, one-movie screen. No additional subjects or movies were
+used to accept the 32-frame configuration.
+
+The float32 implementation changes preserve the learned representation in real
+arithmetic; their floating-point agreement is tested on the stated inputs.
+The separate float16 path is an approximate numerical implementation. No model was
+pruned, distilled, retrained, or substituted. These results do not establish
+accuracy equivalence across populations or unseen stimuli, nor do they include
+ASR runtime. Further changes to precision or representations require a separate prediction
+regression check for this workflow. Generalization claims require additional
+held-out stimuli and subjects. The tested candidates and reviews are
+resolved; this is not a proof that no future optimization is possible.
+
+\section{Reproduction and review}
+The repository contains the extractors, focused unit tests, public benchmark
+scripts, aggregate JSON measurements, and this TeX source. The benchmark accepts
+local event tables and writes no private stimulus paths or text into the public
+result. Optional saved feature arrays are private inputs for downstream checks.
+Model loading uses the user's existing Hugging Face access and model cache.
+The executed comparisons used the same local cache in offline mode. Feature
+loaders request model names without explicit revisions; the recorded video
+revision comes from the cache spot check, and audio/text revisions describe
+separately resolved configurations. These records do not pin all weight and
+processor snapshots for future downloads. Exact reproduction is consequently
+limited to the evaluated local snapshots and runtime.
+
+DeepSeek V4.1 Flash produced implementation drafts through OpenCode Go. Codex
+reviewed and corrected the changes, executed measurements, and obtained a
+separate source review. Ninety tests passed in each of two Torch environments;
+eight final report checks also passed, including five newly added tests. A fresh
+four-second public prediction call exercised all three extractors and returned
+finite predictions of shape $(4,20484)$ using existing word contexts. The review log distinguishes accepted findings from
+claims rejected after checking the source. The upstream CC-BY-NC-4.0 license
+and attribution remain in place.
+
+\input{features-settings.tex}
+\begin{thebibliography}{9}
+\bibitem{tribe} Meta Platforms, Inc. \emph{TRIBE v2 source and released models}.
+\url{https://github.com/facebookresearch/tribev2}.
+\bibitem{neuralset} Meta Platforms, Inc. \emph{Neuralset 0.0.2}.
+\url{https://pypi.org/project/neuralset/0.0.2/}.
+\bibitem{vjepa} Meta Platforms, Inc. \emph{V-JEPA 2 source and models}.
+\url{https://github.com/facebookresearch/vjepa2}.
+\bibitem{hfvideo} Hugging Face. \emph{V-JEPA 2 implementation documentation}.
+\url{https://huggingface.co/docs/transformers/model_doc/vjepa2}.
+\bibitem{hfaudio} Hugging Face. \emph{Wav2Vec2-BERT implementation documentation}.
+\url{https://huggingface.co/docs/transformers/model_doc/wav2vec2-bert}.
+\end{thebibliography}
+\end{document}

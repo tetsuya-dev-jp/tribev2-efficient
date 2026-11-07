@@ -66,7 +66,32 @@ neuralset, and the original 40-window reconstruction checks the alignment
 contract. These claims did not identify a defect. The private prefetch probe
 keeps its frame offsets, processor, and image limit fixed within each video,
 and its two-video CPU check verifies timestamp order and future consumption.
-Its speed and numerical outputs still require the actual paired GPU experiment.
+Its speed and numerical outputs were subsequently tested in the paired GPU
+experiment and the production verification recorded below.
+
+### Final video prefetch
+
+The one-window prototype met the prespecified 5% timing criterion with bitwise
+identical features in all three paired 60-second comparisons. Its production
+integration uses the executor context inside the video reader's `try/finally`,
+so an outstanding CPU read completes before the reader closes on an inference
+error. Tests check real-thread input order and event cache reset, a deterministic
+shutdown-order model, and propagation of a reader error. The shutdown-order
+double does not claim to exercise every real-thread schedule.
+
+DeepSeek's first draft used redundant manual shutdown paths and invalid or
+vacuous test doubles. Review replaced them with the standard executor context
+and tests that assert actual ordering. The benchmark uses a deferred serial-read
+control and runs the production candidate without patches. A source reviewer
+identified that a four-second sample had been extended without validating the
+full interval. The shared selector now requires an original event to cover the
+requested duration; tests reject both a short interval and a coverage gap.
+
+The report draft incorrectly treated a constant condition order as alternating,
+passed raw JSON where grouped runs were needed, and overstated the prefetch
+accuracy-check scope. These were corrected before rendering: all three pairs
+must have the recorded alternating order, and the bitwise check covers the
+120-clip workload separately from the earlier 168-subject precision check.
 
 ### Secondary brain readout
 
@@ -112,3 +137,33 @@ This review record does not claim exhaustive optimization or universal accuracy.
 Readout-phase verification: 30 tests passed in each of the two tested Torch environments;
 all four eager benchmark runs pass all four candidate comparisons. The final
 independent review found no further actionable claim-to-evidence defect.
+
+## Final verification and publication review
+
+The production prefetch comparison passes three alternating pairs with bitwise
+identity over all 3,379,200 values per pair; its median reduction is 7.42%.
+The final short-event measurement is 12.07x faster than the separately measured
+original FP32 baseline, at 76.16% less peak tensor allocation. All 672 existing
+subject/movie pairs pass the earlier FP16 precision regression; prefetch equality
+is a separate 120-clip check, not a repeated full-cohort extraction.
+
+Ninety full-suite tests pass in both tested Torch environments. Eight final
+report checks also pass in each, including five new cases (95 distinct cases
+in total). The public prediction entrypoint passes fresh extraction of all
+three modalities on a four-second input with existing word contexts. ASR is
+outside that check. The final report is generated from validated JSON and all
+nine pages were visually inspected. Two underfull reference-list lines remain;
+there are no overfull boxes or unresolved citations/references.
+
+DeepSeek V4.1 Flash's final reciprocal review found no concrete reproducible
+defect in the supplied production, benchmark, and report scope. Its description
+of the frame-cache mutation was checked against the code: the reader constructs
+a new current-window dictionary rather than mutating the previous dictionary.
+The independent Codex review also checks the final result-to-claim alignment.
+
+The final independent review verified the measured 12.07x speed ratio, 76.16%
+peak-allocation reduction, 7.42% paired prefetch reduction, and all 672 precision
+gate decisions. It found one reproduction-path issue: the current FP32 command
+could overwrite the historical serial result used by the renderer. The README
+now uses a separate `features_video_float32_prefetch.json` output. No other
+material claim-to-evidence mismatch remained in the reviewed scope.

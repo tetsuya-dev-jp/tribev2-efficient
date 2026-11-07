@@ -1,0 +1,189 @@
+{
+  "passed": true,
+  "torch": "2.12.0+rocm7.14.0",
+  "hip": "7.14.60850",
+  "transformers": "5.14.1",
+  "neuralset": "0.0.2",
+  "device": "AMD Radeon RX 9070 XT",
+  "dtype": "torch.float32",
+  "model_revision": "875c192b7b704b87d1e1d99345769632dd5f739a",
+  "scope": "16 original event-grid timestamps, not a complete cache re-extraction",
+  "rows": [
+    {
+      "movie_ordinal": 0,
+      "event_index": 2,
+      "sample_index": 0,
+      "n_samples": 120,
+      "event_duration_s": 60.0,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 0,
+      "event_index": 14,
+      "sample_index": 0,
+      "n_samples": 162,
+      "event_duration_s": 81.0,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 0,
+      "event_index": 14,
+      "sample_index": 81,
+      "n_samples": 162,
+      "event_duration_s": 81.0,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 0,
+      "event_index": 14,
+      "sample_index": 161,
+      "n_samples": 162,
+      "event_duration_s": 81.0,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 1,
+      "event_index": 2,
+      "sample_index": 0,
+      "n_samples": 120,
+      "event_duration_s": 60.0,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 1,
+      "event_index": 14,
+      "sample_index": 0,
+      "n_samples": 156,
+      "event_duration_s": 78.03999999999996,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 1,
+      "event_index": 14,
+      "sample_index": 78,
+      "n_samples": 156,
+      "event_duration_s": 78.03999999999996,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 1,
+      "event_index": 14,
+      "sample_index": 155,
+      "n_samples": 156,
+      "event_duration_s": 78.03999999999996,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 2,
+      "event_index": 2,
+      "sample_index": 0,
+      "n_samples": 120,
+      "event_duration_s": 60.0,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 2,
+      "event_index": 14,
+      "sample_index": 0,
+      "n_samples": 150,
+      "event_duration_s": 75.21000000000004,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 2,
+      "event_index": 14,
+      "sample_index": 75,
+      "n_samples": 150,
+      "event_duration_s": 75.21000000000004,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 2,
+      "event_index": 14,
+      "sample_index": 149,
+      "n_samples": 150,
+      "event_duration_s": 75.21000000000004,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 3,
+      "event_index": 2,
+      "sample_index": 0,
+      "n_samples": 120,
+      "event_duration_s": 60.0,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 3,
+      "event_index": 14,
+      "sample_index": 0,
+      "n_samples": 122,
+      "event_duration_s": 60.83000000000004,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 3,
+      "event_index": 14,
+      "sample_index": 61,
+      "n_samples": 122,
+      "event_duration_s": 60.83000000000004,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    },
+    {
+      "movie_ordinal": 3,
+      "event_index": 14,
+      "sample_index": 121,
+      "n_samples": 122,
+      "event_duration_s": 60.83000000000004,
+      "max_abs": 0.0,
+      "relative_l2": 0.0,
+      "failed_elements": 0,
+      "bitwise_equal": true
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+The encoder parameter count decreases from 177,205,397 to 156,492,437 (11.69\%). Float32 parameter storage decreases from 675.98 to 596.97 MiB. Table~\ref{tab:runtime} reports forward latency; each runtime is a separate comparison.
+
+\begin{table}[htbp]\centering\sffamily\small
+\caption{Median forward latency (ms) and baseline/fused speed ratio}\label{tab:runtime}
+\begin{tabular}{@{}lrrrr@{}}\toprule
+Runtime & Baseline & Fused & Fused + SDPA & Ratio \\\midrule
+ROCm, batch 1 & 11.31 & 10.22 & 11.16 & 1.11 \\
+ROCm, batch 8 & 42.91 & 35.69 & 40.03 & 1.20 \\
+CPU Torch 2.6, batch 1 & 163.67 & 133.47 & 133.37 & 1.23 \\
+\bottomrule\end{tabular}\end{table}
+
+Table~\ref{tab:ablation} separates the candidate changes on ROCm at batch 8. The intervals are sample quartiles, not confidence intervals. Allocator peaks include input tensors; they are not physical VRAM or activation-only measurements.
+
+\begin{table}[htbp]\centering\sffamily\small
+\caption{ROCm batch-8 ablation and peak tensor allocation}\label{tab:ablation}
+\begin{tabular}{@{}lrrr@{}}\toprule
+Variant & Median (ms) & IQR (ms) & Peak (MiB) \\\midrule
+Baseline & 42.91 & [42.83, 43.02] & 1010.19 \\
+Pooling only & 37.78 & [37.69, 37.88] & 999.94 \\
+Fused readout & 35.69 & [35.59, 35.74] & 919.85 \\
+SDPA only & 47.35 & [47.25, 47.44] & 1010.19 \\
+Fused + SDPA & 40.03 & [39.96, 40.11] & 854.23 \\
+\bottomrule\end{tabular}\end{table}
+
+In-place batch-8 conversion takes 553.03 ms. Its sampled incremental process RSS is 533.80 MiB and its peak GPU tensor allocation is 843.20 MiB. Dividing this conversion time by the observed per-call saving gives about 77 batch-8 calls to amortize conversion. This is an in-place estimate, not a cold-loader measurement. A single four-movie pass has only five batch-8 calls, so a total-runtime benefit is not established for that workload. Parameter savings apply immediately; forward-time savings favor reusing the converted model.
+
+Table~\ref{tab:fidelity} reports the existing-subject regression check. All four movies pass pooled and unpooled numerical gates.
+
+\begin{table}[htbp]\centering\sffamily\small
+\caption{Mean parcel correlation and numerical differences for one existing evaluation subject}\label{tab:fidelity}
+\begin{tabular}{@{}lrrrr@{}}\toprule
+Movie & Baseline $r$ & Fused $r$ & $\Delta$ mean $r$ & Max parcel $|\Delta r|$ \\\midrule
+1 & 0.236518 & 0.236518 & $1.49\times10^{-10}$ & $2.98\times10^{-8}$ \\
+2 & 0.263297 & 0.263297 & $-5.81\times10^{-10}$ & $2.90\times10^{-8}$ \\
+3 & 0.200522 & 0.200522 & $-1.29\times10^{-9}$ & $3.30\times10^{-8}$ \\
+4 & 0.257067 & 0.257067 & $-3.68\times10^{-10}$ & $3.56\times10^{-8}$ \\
+\bottomrule\end{tabular}\end{table}
+
+The largest pooled and unpooled absolute prediction differences are $4.77\times10^{-6}$ and $5.60\times10^{-6}$, respectively. The largest absolute relative change in labeled-vertex MSE is $2.68\times10^{-10}$. No population-level equivalence test is claimed.
+
+In the separate batch-1 compiler experiment, fused eager inference takes 10.19 ms and compiled inference 8.89 ms (observed timing ratio 1.15). The first compiled call takes 1.92 s with the existing compiler cache; this is not a clean-cache compilation estimate.
+
+In the separate batch-8 compiler experiment, fused eager inference takes 35.49 ms and compiled inference 32.00 ms (observed timing ratio 1.11). The first compiled call takes 8.15 s with the existing compiler cache; this is not a clean-cache compilation estimate.
+
+With the condition order reversed at batch 8, baseline and fused medians are 48.68 and 41.30 ms, respectively (ratio 1.18).

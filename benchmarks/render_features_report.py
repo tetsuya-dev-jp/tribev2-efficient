@@ -225,6 +225,55 @@ def figure_accuracy(rows):
     plt.close(fig)
 
 
+def verify_prefetch(data):
+    assert data["status"] == "measured", f"prefetch: status {data['status']}"
+    assert data["accepted"] is True, "prefetch: not accepted"
+    assert data["baseline_mode"] == "serial_deferred_cpu_reads"
+    assert data["candidate_mode"] == "production_single_window_prefetch"
+    assert data["model"] == "facebook/vjepa2-vitg-fpc64-256"
+    assert data["model_dtype"] == "torch.float16"
+    assert data["cache_bypassed"] is True and data["model_load_in_timing"] is True
+    sel = data["selection"]
+    assert len(sel) == 1 and sel[0]["movie_ordinal"] == 0
+    assert sel[0]["duration_s"] == 60 and sel[0]["offset_s"] == 120.0
+    assert data["num_frames"] == 64
+    runs = data["runs"]
+    assert len(runs) == 6, "prefetch: expected 3 pairs (6 runs)"
+    by = {"baseline": {}, "candidate": {}}
+    order = []
+    for r in runs:
+        assert r["condition"] in by, f"prefetch: bad condition {r['condition']}"
+        assert np.isfinite(r["wall_s"]) and r["wall_s"] > 0
+        assert r["peak_allocated_bytes"] > 0
+        assert r["shapes"] == [[20, 1408, 120]]
+        assert r["output_dtype"] == "float32"
+        assert r["output_timing"] == [{"frequency": 2.0, "duration": 60.0}]
+        rep = r["repeat"]
+        assert rep not in by[r["condition"]], "prefetch: duplicate repeat"
+        by[r["condition"]][rep] = r
+        order.append((rep, r["condition"]))
+    assert sorted(by["baseline"]) == [0, 1, 2] and sorted(by["candidate"]) == [0, 1, 2]
+    # alternating order within each pair
+    assert order == [(0, "baseline"), (0, "candidate"),
+                     (1, "candidate"), (1, "baseline"),
+                     (2, "baseline"), (2, "candidate")]
+    comps = data["comparisons"]
+    assert len(comps) == 3 and [c["repeat"] for c in comps] == [0, 1, 2]
+    for c in comps:
+        assert c["bitwise_equal"] is True, "prefetch: not bitwise equal"
+        assert c["finite"] is True and c["passed"] is True
+        assert c["compared_elements"] == 20 * 1408 * 120 == 3379200
+        assert c["failed_elements"] == 0 and c["max_abs"] == 0.0
+    med_b = float(np.median([r["wall_s"] for r in by["baseline"].values()]))
+    med_c = float(np.median([r["wall_s"] for r in by["candidate"].values()]))
+    assert np.isclose(data["median_times_s"]["baseline"], med_b)
+    assert np.isclose(data["median_times_s"]["candidate"], med_c)
+    assert np.isclose(data["ratio_of_median_times"], med_c / med_b)
+    assert med_c <= 0.95 * med_b, "prefetch: ratio exceeds .95"
+    return by
+
+
+
 def main():
     REPORT.mkdir(exist_ok=True)
     video = load("features_video_float32")
@@ -233,6 +282,14 @@ def main():
     fp16 = load("features_video_float16")
     accuracy = load("video_precision_accuracy")
     cohort = load("video64_cohort_accuracy")
+    prefetch = load("video_prefetch")
+    prefetch_short = load("features_video_float16_prefetch")
+    prefetch_pairs = verify_prefetch(prefetch)
+    assert prefetch_short["cpu_window_prefetch"] is True
+    verify_video_pair(video, prefetch_short)
+    prefetch_short_runs = verify_fp16(prefetch_short)
+    for key in ("model", "model_dtype", "mean_dtype", "torch", "hip", "transformers", "neuralset", "device"):
+        assert prefetch[key] == prefetch_short[key], f"Prefetch comparison differs in {key}"
 
     verify_video_pair(video, fp16)
     video = verify_features(video, "video", 4, loading=True)
@@ -251,14 +308,15 @@ def main():
         table_rows.append([name, f"{orig:.3f}", f"{cand:.3f}", f"{1/ratio:.2f}",
                            f"{op:.3f}", f"{cp:.3f}"])
     text_out = []
-    text_out.append(r"This section reports the four feature-extraction workloads on the AMD RX~9070~XT. "
+    text_out.append(r"The first four conditions describe the stages before CPU prefetch was added to video extraction. "
+                    r"They were measured on the AMD RX~9070~XT. "
                     r"Video times include model loading; text and audio times exclude loading. "
                     r"The samples contain 32 video clips, 128 words, and four 60-second audio events. "
                     r"Each modality is a separate workload; these speed ratios do not measure a combined pipeline. "
                     r"Table~\ref{tab:features-performance} reports medians and ratios; "
                     r"Table~\ref{tab:features-raw} retains both repetitions. No confidence intervals are claimed.")
     text_out.append(table(
-        "Median extraction time and peak GPU tensor allocation across two repetitions per condition. "
+        "Before video prefetch: median extraction time and peak GPU tensor allocation across two repetitions per condition. "
         "Speedup is original/candidate median; peak allocation is the maximum across repetitions. "
         "Video times include load; text and audio exclude load. "
         "*Video FP16 uses a separately recorded FP32 video baseline and is not interleaved with the FP16 runs.",
@@ -274,7 +332,7 @@ def main():
                      ", ".join(f"{r['wall_s']:.3f}" for r in video["baseline"]),
                      ", ".join(f"{r['wall_s']:.3f}" for r in fp16_runs)])
     text_out.append(table(
-        "Raw per-repetition extraction times (s). Video FP32 and FP16 are not interleaved; the FP16 "
+        "Before video prefetch: raw extraction times (s). Video FP32 and FP16 are not interleaved; the FP16 "
         "candidate is compared against the separately recorded FP32 baseline median.",
         "tab:features-raw",
         ["Condition", "Original repetitions (s)", "Candidate repetitions (s)"],
@@ -321,14 +379,14 @@ def main():
                     "No participant identifiers or individual diagnostic rows are redistributed.")
     text_out += [
         r"\begin{figure}[htbp]\centering\includegraphics[width=\linewidth]{features-performance.pdf}"
-        r"\caption{Extraction cost on the stated samples. Left: bars show candidate/original median time; "
+        r"\caption{Extraction costs before video prefetch. Left: bars show candidate/original median time; "
         r"black points show the two candidate repetitions divided by the original median. "
         r"Right: gray and colored bars show original and candidate peak GPU tensor allocation, "
         r"respectively, taking the maximum of two runs. Video FP16 (*) was timed separately "
         r"from the original FP32 runs. Allocation excludes non-PyTorch VRAM.}"
         r"\label{fig:features-performance}\end{figure}",
         r"\begin{figure}[htbp]\centering\includegraphics[width=\linewidth]{features-accuracy.pdf}"
-        r"\caption{Float16 video regression on four movies across 168 existing subjects. "
+        r"\caption{Serial float16 video regression on four movies across 168 existing subjects. "
         r"Left: diamonds, subject median change in mean parcel r; thick lines, interquartile range; "
         r"thin lines, 5th--95th percentiles; ticks, extrema. These are subject distributions, not confidence intervals. "
         r"Right: the maximum for each metric divided by its fixed margin; these maxima may come from "
@@ -336,6 +394,35 @@ def main():
         r"squares maximum parcel r, and triangles relative labeled-vertex MSE. Values at or below 1 pass.}"
         r"\label{fig:features-accuracy}\end{figure}",
     ]
+    text_out.append(r"\subsection{Final video path with CPU prefetch}")
+    text_out.append(r"The final path overlaps one CPU frame window with GPU inference. "
+                    r"Table~\ref{tab:prefetch-long} compares it with serial FP16 on one 60-second event. "
+                    r"All three pairs are finite and bitwise equal over 3,379,200 values per pair. "
+                    r"The 168-subject precision evaluation used the serial FP16 path; the full cohort "
+                    r"was not re-extracted with prefetch. The separate prefetch check covers these 120 clips.")
+    serial = [prefetch_pairs["baseline"][i] for i in range(3)]
+    parallel = [prefetch_pairs["candidate"][i] for i in range(3)]
+    rows = [[str(i+1), f"{serial[i]['wall_s']:.3f}", f"{parallel[i]['wall_s']:.3f}"] for i in range(3)]
+    rows.append(["Median", f"{med(serial):.3f}", f"{med(parallel):.3f}"])
+    text_out.append(table(
+        "Production prefetch: three alternating pairs on one 60-second event; loading included. "
+        "Serial control performs the same CPU reads when the main thread requests each result.",
+        "tab:prefetch-long", ["Pair", "Serial FP16 (s)", "Prefetch FP16 (s)"], rows))
+    text_out.append(f"The median reduction is {(1-med(parallel)/med(serial))*100:.2f}\\%. "
+                    "One future bounds CPU lookahead to one window; GPU inference stays on the main thread. "
+                    "The worker is joined before the video reader closes, including on inference errors.")
+    original = video["baseline"]
+    final_speedup = med(original) / med(prefetch_short_runs)
+    text_out.append(table(
+        "Final short-event extraction: 32 clips, two repetitions, model loading included. "
+        "The original FP32 baseline was recorded separately; these conditions were not interleaved.",
+        "tab:prefetch-short", ["Condition", "Median (s)", "Speedup", "Peak (GiB)"],
+        [["Original FP32", f"{med(original):.3f}", "1.00", f"{maxpeak(original):.3f}"],
+         ["FP16 with prefetch", f"{med(prefetch_short_runs):.3f}", f"{final_speedup:.2f}",
+          f"{maxpeak(prefetch_short_runs):.3f}"]]))
+    repetitions = ", ".join(f"{row['wall_s']:.3f}" for row in prefetch_short_runs)
+    text_out.append(f"The final short-event repetitions took {repetitions} s. "
+                    "The short-event and 60-second workloads differ; their speed ratios are not multiplied.")
     (REPORT / "features-results.tex").write_text("\n\n".join(text_out) + "\n")
 
 
