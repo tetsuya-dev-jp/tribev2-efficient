@@ -158,8 +158,8 @@ def figure_performance(summary, fp32_video, fp16_runs, text, audio):
         ax.set_yticks(y, names)
     axes[1].set(xlabel="Peak GPU tensor allocation (GiB)", title="B. Peak tensor allocation")
     axes[1].set_xlim(left=0)
-    axes[1].legend(frameon=False, fontsize=7)
-    axes[0].legend(frameon=False, fontsize=7, loc="lower right")
+    axes[1].legend(frameon=False, fontsize=7, loc="upper center",
+                   bbox_to_anchor=(.5, -.20), ncol=2)
     for suffix in ("pdf", "png"):
         fig.savefig(REPORT / f"features-performance.{suffix}", dpi=200)
     plt.close(fig)
@@ -215,10 +215,11 @@ def figure_accuracy(rows):
                      color=color, ms=5, label=label)
     axes[1].axhline(1, color="black", ls="--", lw=.9, label="Gate")
     axes[1].set_xticks(movies, [str(i+1) for i in movies])
-    axes[1].set(title="B. Worst subject, relative to margin", xlabel="Movie",
+    axes[1].set(title="B. Worst change per metric", xlabel="Movie",
                 ylabel="Maximum fraction of margin")
     axes[1].set_ylim(bottom=0)
-    axes[1].legend(frameon=False, fontsize=7, ncol=2)
+    axes[1].legend(frameon=False, fontsize=7, ncol=2, loc="upper center",
+                   bbox_to_anchor=(.5, -.20))
     for suffix in ("pdf", "png"):
         fig.savefig(REPORT / f"features-accuracy.{suffix}", dpi=200)
     plt.close(fig)
@@ -293,7 +294,7 @@ def main():
                          scientific(row["max_abs_parcel_r_delta"]),
                          scientific(row["relative_mse_change"])])
     text_out.append(table(
-        "Existing-subject brain-score agreement for the FP16 video path. Baseline and candidate mean parcels "
+        "Existing-subject brain-score agreement for the FP16 video path. Baseline and candidate mean parcel "
         "correlations are shown to six decimals; deltas use scientific notation. "
         r"Margins: mean $|\Delta r| \leq 10^{-4}$, max parcel $|\Delta r| \leq 10^{-3}$, "
         r"$|\Delta \mathrm{MSE}|/\mathrm{MSE} \leq 10^{-3}$.",
@@ -310,7 +311,7 @@ def main():
     text_out.append(table(
         "FP16 regression across all 168 existing subjects per movie. Worst changes take the maximum "
         "absolute change across subjects (and parcels for parcel r); each subject/movie pair uses the fixed margins.",
-        "tab:cohort", ["Movie", "Orig. mean r", "New mean r", "Max mean r", "Max parcel r", "Max rel. MSE"],
+        "tab:cohort", ["Movie", "Orig. mean $r$", "New mean $r$", r"Max $|\Delta\bar r|$", r"Max $|\Delta r|$", r"Max rel. $|\Delta$MSE$|$"],
         [[str(i+1), f"{r['baseline_mean_parcel_r']:.6f}", f"{r['candidate_mean_parcel_r']:.6f}",
           scientific(r["max_abs_subject_mean_r_delta"]), scientific(r["max_abs_parcel_r_delta"]),
           scientific(r["max_abs_relative_mse_change"])] for i, r in enumerate(cohort_rows)]))
@@ -330,7 +331,8 @@ def main():
         r"\caption{Float16 video regression on four movies across 168 existing subjects. "
         r"Left: diamonds, subject median change in mean parcel r; thick lines, interquartile range; "
         r"thin lines, 5th--95th percentiles; ticks, extrema. These are subject distributions, not confidence intervals. "
-        r"Right: worst absolute subject-level change divided by its fixed margin; circles show mean r, "
+        r"Right: the maximum for each metric divided by its fixed margin; these maxima may come from "
+        r"different subjects. Circles show mean r, "
         r"squares maximum parcel r, and triangles relative labeled-vertex MSE. Values at or below 1 pass.}"
         r"\label{fig:features-accuracy}\end{figure}",
     ]

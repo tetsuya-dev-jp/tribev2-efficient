@@ -19,7 +19,7 @@ production conversion. Raw agent transcripts are private working material.
 | Variable-size frames with `max_imsize` could change the resize reference frame. | The tested HCP inputs have fixed frame dimensions. Do not extrapolate that verification to variable-resolution input. |
 | Moving text means to the GPU or casting before averaging could change bfloat16 outputs. | Transfer selected tokens/layers, then retain the original CPU mean and float32 conversion. All 128 sampled words are bitwise equal in both repetitions. |
 | The audio reference caches 25 layers despite `cache_n_layers=20`. | Preserve all 25 layers; select timestamps before transfer, not layers. Four real audio events are bitwise equal in both repetitions. |
-| The first audio rewrite retained native-rate states until the next event's forward, increasing GPU peak. | Release outputs after CPU transfer and before yielding; a weakref test checks release at the next forward. Rerun the measured comparison after this correction. |
+| The first audio rewrite retained native-rate states until the next event's forward, increasing GPU peak. | Release outputs after CPU transfer and before yielding; a weakref test checks release at the next forward. The corrected paired measurements remain bitwise equal and have the same 8,014,798,336-byte peak as the reference. |
 | Exca can return RAM cache hits even without a cache directory. | Timing calls the undecorated extraction method for both conditions. |
 | A draft benchmark used incorrect imports, sampling counts, and a cached text call. | Replace those paths with verified APIs and one video interval per movie; test selection counts and comparison failures. |
 | Equal candidate/reference shapes alone could hide dropped outputs. | Check output count and expected released-model dimensions against every input event. |
@@ -36,8 +36,15 @@ production conversion. Raw agent transcripts are private working material.
 | A draft renderer asserted all movies pass before results existed. | Compute acceptance from recorded score rows and fixed gates; reject partial/error results and verify lag, event count, cache spot checks, and all 40 original alignments. |
 | Reduced-frame evaluation can misuse a single-movie screen as acceptance. | Label screen results separately; unchanged gates on all four movies are required for full acceptance. |
 | The available BOLD cache contains 168 complete subjects, not only the initial subject. | Extend the unchanged margins to all 672 subject/movie pairs; use identical predictions and canonical scoring. Public cohort outputs contain only movie aggregates. |
+| Feature loaders use model names without explicit weight/processor revisions. | Limit exact reproduction claims to the evaluated offline local snapshots; distinguish the loaded video spot-check revision from separately resolved audio/text configurations. |
+| Report wording could apply the feature gate to FP16 or require held-out data for the existing-cache screen. | State the separate FP16 score acceptance rule explicitly; distinguish workflow regression from generalization claims. |
 | Prediction-bundle metadata alone does not verify the selected score cache. | Check original predictions and segment starts against that cache before cohort scoring. |
 | A sliced prediction tensor retains its padded backing storage when saved. | Clone only the valid slice for the private prediction export. |
+
+The final 64-frame result review confirmed that speed, peak allocation, all 672
+pass decisions, and cohort means/extrema match the recorded JSON. A figure title
+was corrected to clarify that maxima are taken separately for each metric and
+may come from different subjects.
 
 The independent source reviewer found no blocker for the tested fixed-resolution
 HCP path. A private evaluator plumbing check deliberately supplied original

@@ -24,13 +24,28 @@ Fresh text/audio extraction has passed two alternating-order comparisons:
 
 - Text: 128 words in unchanged four-word batches. Baseline 13.05/15.48 s;
   optimized 6.27/6.31 s. Both comparisons are bitwise equal over 7,864,320 values.
-- Audio: four 60-second events. Baseline 4.63/4.58 s; optimized 4.07/4.08 s.
+- Audio: four 60-second events. Baseline 4.67/4.61 s; optimized 4.08/4.09 s.
   Both comparisons are bitwise equal over 12,288,000 values.
 
 These timings exclude model loading and transcription, and include input
 processing, forward computation, and CPU transfer. The public benchmark bypasses
 Exca feature caching. Video's separate short-event comparison includes model
 loading; it must not be interpreted as sustained full-movie throughput.
+
+## Completed 64-frame extraction results
+
+The FP32 video rewrite passes both numerical comparisons: baseline
+241.81/242.40 s versus 197.04/197.08 s, a 1.23x ratio of medians. Peak PyTorch
+allocation falls from 9.47 to 4.52 GiB. The FP16 path takes 21.36/21.01 s and
+2.26 GiB: 11.43x faster and 76.16% lower peak allocation than the original FP32
+short-event workload. FP16 timings were recorded separately, not interleaved
+with the original FP32 runs.
+
+The full 64-frame FP16 prediction comparison passes all 672 subject/movie pairs
+across 168 existing subjects and four movies. Worst absolute changes are
+6.51e-5 for mean parcel r, 7.88e-4 for a parcel r, and 3.19e-5 for relative
+labeled-vertex MSE. All are below the unchanged margins below. This supports
+adoption for this evaluated workflow, not generalization to unseen inputs.
 
 ## Prespecified approximate-video evaluation
 
@@ -86,7 +101,7 @@ candidates; neither is adopted from its speed alone.
 
 ### Additional candidates fixed before their score results
 
-If the 64-frame FP16 path passes all four movies, evaluate 32 frames at the
+If the 64-frame FP16 path passes all 672 subject/movie pairs, evaluate 32 frames at the
 same 4-second window width and 2 Hz output rate. Preserve the original checkpoint,
 event boundaries, preprocessing, layer groups, and all three score margins.
 First score Movie 1 as a rejection screen. Any failed margin rejects this
@@ -97,7 +112,10 @@ independent generalization experiment, and must never be reported as full accept
 
 One-window CPU preprocessing prefetch is a separate exact-input candidate.
 Its acceptance requires bitwise-equal extracted features and at least 5% lower
-median uncached time in a bounded paired comparison. Its estimated ceiling is
+median uncached time in three alternating paired comparisons on one 60-second
+event (Movie 1, offset 120 s; 120 clips). This workload was selected before the
+prefetch measurements to represent steady windows rather than mostly clamped
+startup frames; model loading is included in both conditions. Its estimated ceiling is
 small because a single FP16 encoder call takes about 0.55 s versus roughly
 0.61 s including processing on steady 60-second events. Keeping processed CPU
 frames in FP16 is lower priority: it saves only about 24 MiB of host cache,
@@ -162,7 +180,7 @@ Fix reproducible defects and rerun affected checks. Stop this bounded experiment
 when the tested candidates have decisions, verification passes, and no actionable
 review finding remains. This is not a proof that no future improvement exists.
 
-## Results and decisions
+## Secondary readout results and decisions
 
 Table 1. Median forward latency, excluding transfers and feature extraction.
 Ratios compare the original and fused model within each run, not across runtimes.
@@ -213,7 +231,7 @@ parcel is 3.56e-8, and the largest absolute relative labeled-vertex MSE change i
 2.68e-10. The canonical lag and valid-length trimming are preserved. This is
 numerical regression evidence, not a new population-level accuracy result.
 
-Executed verification:
+Readout-phase verification:
 
 - 30 tests pass with the research ROCm installation and with CPU Torch 2.6.0;
   the unit tests themselves run on CPU. Dependency deprecation warnings remain.
