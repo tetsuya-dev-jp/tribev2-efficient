@@ -179,6 +179,8 @@ def main():
                        "baseline_mean_parcel_r": float(ref_r.mean()),
                        "candidate_mean_parcel_r": float(new_r.mean()),
                        "mean_parcel_r_delta": mean_delta, "max_abs_parcel_r_delta": maximum_delta,
+                       "min_parcel_r_delta": float((new_r - ref_r).min()),
+                       "max_parcel_r_delta": float((new_r - ref_r).max()),
                        "baseline_mse": ref_mse, "candidate_mse": new_mse,
                        "relative_mse_change": relative_mse,
                        "prediction_max_abs": float(delta.abs().max()),

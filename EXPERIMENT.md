@@ -121,6 +121,16 @@ small because a single FP16 encoder call takes about 0.55 s versus roughly
 frames in FP16 is lower priority: it saves only about 24 MiB of host cache,
 not the dominant encoder GPU storage, and has not been adopted.
 
+## Reduced-frame decision
+
+Reject the 32-frame candidate under the fixed regression margins. Its first-movie
+screen increased mean parcel r by 0.002229 but changed individual parcel r by
+-0.041919 to +0.036098, exceeding the 0.001 regional margin. Relative vertex MSE
+changed by -0.0009245. A cached repeat with signed diagnostics reproduced the
+original screen scores exactly. Aggregate improvement is not evidence of
+preserved regional accuracy. This is a rejection screen on one existing subject
+and one movie, not a full four-movie or 168-subject evaluation.
+
 ## Secondary readout objective and acceptance criteria
 
 Reduce the inference cost of the released TRIBE v2 brain encoder without retraining

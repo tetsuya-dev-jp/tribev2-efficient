@@ -42,6 +42,7 @@ def main():
               "device": torch.cuda.get_device_name(), "model_dtype": "torch.float16",
               "mean_dtype": str(torch.float32), "selection": selection,
               "model_load_in_timing": True, "cache_bypassed": True,
+              "cpu_window_prefetch": True,
               "note": "Candidate-only short-event timings; original timing measured separately. Brain-score validation is separate.",
               "runs": [], "feature_comparisons": []}
     args.output.parent.mkdir(parents=True, exist_ok=True)

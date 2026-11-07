@@ -7,6 +7,7 @@
 """Opt-in feature extractors with the same inputs and cached outputs as neuralset."""
 
 import typing as tp
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import torch
@@ -194,28 +195,41 @@ class EfficientVJEPA2Video(HuggingFaceVideo):
                 expect_frames = nsbase.Frequency(freq).to_ind(event.duration)
                 times = np.linspace(0, video.duration, expect_frames + 1)[1:]
                 output = np.array([])
-                for k, t in tqdm(
-                    enumerate(times), total=len(times), desc="Encoding video"
-                ):
-                    pixels, frame_cache = _read_processed_frame_window(
-                        video, t, subtimes, frame_cache, processor, self.max_imsize
-                    )
-                    pixels = pixels.to(device=device, dtype=dtype)
-                    with torch.inference_mode():
-                        embd = _vjepa2_token_means(
-                            encoder,
-                            pixels,
-                            self.image.cache_n_layers,
-                        )[0]
-                    embd = embd.cpu().numpy()
-                    if (
-                        not self.image.cache_all_layers
-                        and self.image.cache_n_layers is None
+                # Join outstanding CPU reads before the reader closes, including on errors.
+                with ThreadPoolExecutor(max_workers=1) as frame_reader:
+                    pending = None
+                    for k, t in tqdm(
+                        enumerate(times), total=len(times), desc="Encoding video"
                     ):
-                        embd = self.image._aggregate_layers(embd)
-                    if not output.size:
-                        output = np.zeros((len(times),) + embd.shape)
-                    output[k] = embd
+                        if pending is None:
+                            pixels, frame_cache = _read_processed_frame_window(
+                                video, t, subtimes, frame_cache, processor, self.max_imsize
+                            )
+                        else:
+                            pixels, frame_cache = pending.result()
+                            pending = None
+                        if k + 1 < len(times):
+                            pending = frame_reader.submit(
+                                _read_processed_frame_window,
+                                video, times[k + 1], subtimes, frame_cache,
+                                processor, self.max_imsize,
+                            )
+                        pixels = pixels.to(device=device, dtype=dtype)
+                        with torch.inference_mode():
+                            embd = _vjepa2_token_means(
+                                encoder,
+                                pixels,
+                                self.image.cache_n_layers,
+                            )[0]
+                        embd = embd.cpu().numpy()
+                        if (
+                            not self.image.cache_all_layers
+                            and self.image.cache_n_layers is None
+                        ):
+                            embd = self.image._aggregate_layers(embd)
+                        if not output.size:
+                            output = np.zeros((len(times),) + embd.shape)
+                        output[k] = embd
             finally:
                 video.close()
 

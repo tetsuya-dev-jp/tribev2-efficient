@@ -29,7 +29,7 @@ from tribev2.feature_extractors import EfficientVJEPA2Video
 from tribev2.text_features import EfficientHuggingFaceText
 
 
-def select_events(table, modality):
+def select_events(table, modality, video_duration=4):
     event_type = {"video": "Video", "text": "Word", "audio": "Audio"}[modality]
     groups = list(table[table.type == event_type].groupby("run", sort=False))
     if len(groups) != 4:
@@ -38,12 +38,13 @@ def select_events(table, modality):
     for ordinal, (_, group) in enumerate(groups):
         if modality == "video":
             offset = [120.0, 300.0, 480.0, 660.0][ordinal]
-            if group.filepath.nunique() != 1 or (group.offset + group.duration).max() < offset + 4:
+            covered = (group.offset <= offset) & (group.offset + group.duration >= offset + video_duration)
+            if group.filepath.nunique() != 1 or not covered.any():
                 raise ValueError("Selected video interval is not covered by the event table")
             row = group.iloc[0]
             events.append(Video(filepath=row.filepath, frequency=row.frequency,
-                                offset=offset, duration=4, start=0, timeline="sample"))
-            selection.append({"movie_ordinal": ordinal, "offset_s": offset, "duration_s": 4})
+                                offset=offset, duration=video_duration, start=0, timeline="sample"))
+            selection.append({"movie_ordinal": ordinal, "offset_s": offset, "duration_s": video_duration})
         elif modality == "text":
             for begin in (100, 800):
                 rows = group.iloc[begin:begin + 16]

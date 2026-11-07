@@ -353,3 +353,126 @@ def test_compute_dtype_participates_in_cache_uid() -> None:
 
     assert fp32.infra.uid() != fp16.infra.uid()
     assert "compute_dtype=float16" in fp16.infra.uid()
+
+
+class _EventVideo(_FakeVideo):
+    duration = 1.0
+    frequency = 2
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.closed = False
+
+    def read(self):
+        return self
+
+    def get_frame(self, time):
+        assert not self.closed
+        return super().get_frame(time)
+
+    def close(self):
+        self.closed = True
+
+
+@pytest.fixture
+def prefetch_extractor(monkeypatch):
+    from types import SimpleNamespace
+    from tribev2 import feature_extractors
+
+    def wrapper(**kwargs):
+        return SimpleNamespace(
+            model=SimpleNamespace(encoder=torch.nn.Linear(1, 1)),
+            processor=_FakeProcessor(), num_frames=2,
+        )
+
+    def token_means(encoder, pixels, cache_n_layers):
+        return pixels.flatten(1).mean(dim=1).reshape(-1, 1, 1).repeat(1, 2, 1)
+
+    monkeypatch.setattr(feature_extractors, "_HFVideoModel", wrapper)
+    monkeypatch.setattr(feature_extractors, "_vjepa2_token_means", token_means)
+    return EfficientVJEPA2Video(
+        frequency=2, clip_duration=1.0, num_frames=2,
+        image={**MODEL_IMAGE, "device": "cpu", "cache_n_layers": 2},
+    )
+
+
+def test_prefetch_matches_serial_and_resets_per_event(prefetch_extractor):
+    videos = [_EventVideo(height=2), _EventVideo(height=3)]
+    raw = prefetch_extractor.infra._infra_method.method
+    outputs = list(raw(prefetch_extractor, videos))
+    for video, output in zip(videos, outputs, strict=True):
+        serial = _EventVideo(height=video.height)
+        cache, rows = {}, []
+        processor = _FakeProcessor()
+        for time in [.5, 1.0]:
+            pixels, cache = _read_processed_frame_window(
+                serial, time, [.5, 0.0], cache, processor, None,
+            )
+            rows.append(pixels.flatten(1).mean(dim=1).item())
+        expected = np.repeat(np.array(rows, dtype=np.float32)[None, None], 2, axis=0)
+        np.testing.assert_array_equal(output.data, expected)
+        assert video.read_times == serial.read_times
+        assert video.closed
+    assert not np.array_equal(outputs[0].data, outputs[1].data)
+
+
+def test_inference_error_joins_read_before_close(prefetch_extractor, monkeypatch):
+    from concurrent.futures import Future
+    from tribev2 import feature_extractors
+
+    order = []
+    video = _EventVideo()
+
+    class OutstandingRead:
+        def __init__(self, *, max_workers):
+            assert max_workers == 1
+            self.pending = None
+
+        def __enter__(self):
+            return self
+
+        def submit(self, function, *args):
+            assert self.pending is None
+            self.pending = function, args
+            order.append("submit")
+            return Future()
+
+        def __exit__(self, *exc):
+            function, args = self.pending
+            function(*args)  # Model an unfinished read completing during shutdown.
+            order.extend(["read", "join"])
+            return False
+
+    def fail_inference(*args):
+        raise RuntimeError("inference failed")
+
+    def close():
+        order.append("close")
+        video.closed = True
+
+    monkeypatch.setattr(feature_extractors, "ThreadPoolExecutor", OutstandingRead)
+    monkeypatch.setattr(feature_extractors, "_vjepa2_token_means", fail_inference)
+    monkeypatch.setattr(video, "close", close)
+    raw = prefetch_extractor.infra._infra_method.method
+    with pytest.raises(RuntimeError, match="inference failed"):
+        list(raw(prefetch_extractor, [video]))
+    assert order == ["submit", "read", "join", "close"]
+    assert video.closed
+
+
+def test_prefetch_reader_error_propagates_and_closes(prefetch_extractor, monkeypatch):
+    from tribev2 import feature_extractors
+
+    original = feature_extractors._read_processed_frame_window
+    video = _EventVideo()
+
+    def read(video, time, *args):
+        if time == 1.0:
+            raise OSError("frame read failed")
+        return original(video, time, *args)
+
+    monkeypatch.setattr(feature_extractors, "_read_processed_frame_window", read)
+    raw = prefetch_extractor.infra._infra_method.method
+    with pytest.raises(OSError, match="frame read failed"):
+        list(raw(prefetch_extractor, [video]))
+    assert video.closed
