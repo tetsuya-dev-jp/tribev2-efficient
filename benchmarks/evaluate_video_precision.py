@@ -45,6 +45,8 @@ def main():
                  "batch-metadata", "score-cache", "baseline-validation", "output"]:
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--subject", required=True)
+    parser.add_argument("--save-predictions", type=Path,
+                        help="Optional private tensor export for additional subject scoring")
     parser.add_argument("--num-frames", type=int, choices=[32, 64], default=64)
     parser.add_argument("--first-movie-only", action="store_true",
                         help="32-frame rejection screen; never full acceptance")
@@ -137,6 +139,7 @@ def main():
         gc.collect()
         torch.cuda.empty_cache()
         model = xp._model.cuda().eval()
+        exported = {}
         with torch.inference_mode():
             for ordinal, (run, n_trs) in enumerate(scoring_runs):
                 references, predictions = [], []
@@ -154,6 +157,9 @@ def main():
                     predictions.append(new.permute(0, 2, 1).reshape(-1, 20484))
                 reference = torch.cat(references)[:n_trs]
                 prediction = torch.cat(predictions)[:n_trs]
+                if args.save_predictions:
+                    # Avoid saving the padded backing storage of these views.
+                    exported[run] = {"reference": reference.clone(), "candidate": prediction.clone()}
                 with np.load(args.score_cache / f"preds_{run}.npz", allow_pickle=False) as cached:
                     assert np.array_equal(cached["seg_starts"][:n_trs], np.arange(n_trs))
                     torch.testing.assert_close(reference, torch.from_numpy(cached["preds"][:n_trs]),
@@ -181,6 +187,13 @@ def main():
                 result["runs"].append(row)
                 print(run, "mean parcel r delta", mean_delta, "passed", row["passed"], flush=True)
                 args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
+        if args.save_predictions:
+            args.save_predictions.parent.mkdir(parents=True, exist_ok=True)
+            torch.save({"predictions": exported, "frames_per_clip": args.num_frames,
+                        "eval_lag": -5, "gates": GATES,
+                        "original_alignment_windows_bitwise_equal": 40,
+                        "baseline_validation": result["baseline_validation"]},
+                       args.save_predictions)
         result["status"] = "passed" if all(row["passed"] for row in result["runs"]) else "failed"
         passed = result["status"] == "passed"
         if args.first_movie_only:

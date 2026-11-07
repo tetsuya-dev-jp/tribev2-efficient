@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import pytest
 
-from benchmarks.render_features_report import build_summary, verify_video_pair
+from benchmarks.render_features_report import GATES, build_summary, verify_cohort, verify_video_pair
 
 
 def test_half_precision_summary_uses_original_fp32_denominator():
@@ -35,3 +35,23 @@ def test_video_ratio_rejects_different_sampling_or_output_grid():
     half["runs"][0]["output_timing"][0]["frequency"] = 1.0
     with pytest.raises(AssertionError):
         verify_video_pair(original, half)
+
+
+def test_cohort_report_rejects_partial_counts_and_hidden_failed_subjects():
+    runs = ["MOVIE1_CC1", "MOVIE2_HO1", "MOVIE3_CC2", "MOVIE4_HO2"]
+    data = {"status": "passed", "gates": GATES, "eval_lag": -5, "frames_per_clip": 64,
+            "n_subjects": 168, "n_movies": 4, "n_comparisons": 672, "expected_comparisons": 672,
+            "quantile_probabilities": [0,.05,.25,.5,.75,.95,1], "n_failed_comparisons": 0,
+            "runs": [{"run": run, "n_subjects": 168, "n_failed_subjects": 0,
+                      "subject_mean_r_delta_quantiles": [0] * 7, "mean_parcel_r_delta": 0,
+                      "baseline_mean_parcel_r": .2, "candidate_mean_parcel_r": .2,
+                      "max_abs_subject_mean_r_delta": 0, "max_abs_parcel_r_delta": 0,
+                      "max_abs_relative_mse_change": 0} for run in runs]}
+    verify_cohort(data)
+    partial = deepcopy(data)
+    partial["n_comparisons"] = 671
+    with pytest.raises(AssertionError):
+        verify_cohort(partial)
+    data["runs"][0]["max_abs_parcel_r_delta"] = .002
+    with pytest.raises(AssertionError):
+        verify_cohort(data)
