@@ -6,6 +6,7 @@
 
 import types
 import typing as tp
+import weakref
 
 import pytest
 import torch
@@ -134,6 +135,29 @@ def test_rejects_non_audio_event():
 
     with pytest.raises(ValueError, match="only supports Audio"):
         run_get_data(extractor, [object()])
+
+
+def test_hidden_states_released_before_next_forward():
+    class EphemeralModel(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.previous_states = []
+
+        def forward(self, input_values, output_hidden_states=False):
+            assert all(ref() is None for ref in self.previous_states)
+            states = make_states()
+            self.previous_states = [weakref.ref(state) for state in states]
+            return types.SimpleNamespace(hidden_states=states)
+
+    extractor = make_extractor()
+    extractor._feature_extractor = _FakeFeatureExtractor()
+    extractor._model = EphemeralModel()
+    event = make_event(torch.randn(INPUT_FREQUENCY, 1))
+    arrays = run_get_data(extractor, [event, event])
+    expected = _stack_interpolated_hidden_states(make_states(), Frequency(2).to_ind(DURATION))
+    assert len(arrays) == 2
+    for array in arrays:
+        assert torch.equal(torch.from_numpy(array.data), expected)
 
 
 def test_has_own_registration_and_cache_namespace():

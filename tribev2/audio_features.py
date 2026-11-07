@@ -114,6 +114,8 @@ class EfficientWav2VecBert(Wav2VecBert):
 
             timepoints = nsbase.Frequency(float(self.frequency)).to_ind(event.duration)
             data = _stack_interpolated_hidden_states(outputs.hidden_states, timepoints)
+            # Release native-rate GPU states before the next event's forward.
+            del outputs, features
             yield nsbase.TimedArray(
                 data=data.numpy(),
                 frequency=float(self.frequency),

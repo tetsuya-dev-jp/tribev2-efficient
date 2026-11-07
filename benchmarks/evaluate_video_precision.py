@@ -45,7 +45,12 @@ def main():
                  "batch-metadata", "score-cache", "baseline-validation", "output"]:
         parser.add_argument("--" + name, required=True, type=Path)
     parser.add_argument("--subject", required=True)
+    parser.add_argument("--num-frames", type=int, choices=[32, 64], default=64)
+    parser.add_argument("--first-movie-only", action="store_true",
+                        help="32-frame rejection screen; never full acceptance")
     args = parser.parse_args()
+    if args.first_movie_only and args.num_frames != 32:
+        parser.error("--first-movie-only is only defined for the 32-frame candidate")
     if args.original_cache.resolve() == args.candidate_cache.resolve():
         parser.error("Candidate cache must be separate from the original cache")
     if not torch.cuda.is_available():
@@ -77,18 +82,25 @@ def main():
     config["name"] = "EfficientVJEPA2Video"
     config["compute_dtype"] = "float16"
     config["image"]["device"] = "cuda"
+    cache_version = "fp16-token-means-fp32-v1"
+    if args.num_frames == 32:
+        config["num_frames"] = 32
+        cache_version += "-nf32"
     config["infra"].update(folder=str(args.candidate_cache), cluster=None,
                            mode="cached", keep_in_ram=False,
-                           version="fp16-token-means-fp32-v1")
+                           version=cache_version)
     candidate = EfficientVJEPA2Video(**config)
     assert candidate.infra.uid() != original.infra.uid()
 
-    result = {"status": "running", "candidate": "video_float16_float32_token_means",
-              "n_subjects": 1, "n_movies": 4, "n_events": 60,
+    scoring_runs = list(RUNS.items())[:1] if args.first_movie_only else list(RUNS.items())
+    active_events = events[:15] if args.first_movie_only else events
+    result = {"status": "running", "candidate": f"video_float16_float32_token_means_nf{args.num_frames}",
+              "n_subjects": 1, "n_movies": len(scoring_runs), "n_events": len(active_events),
+              "scope": "rejection_screen_only" if args.first_movie_only else "four_movie_regression",
               "note": "Existing-subject regression within prespecified engineering margins; no population equivalence claim.",
               "torch": torch.__version__, "hip": torch.version.hip,
               "transformers": version("transformers"), "neuralset": version("neuralset"),
-              "device": torch.cuda.get_device_name(), "frames_per_clip": 64,
+              "device": torch.cuda.get_device_name(), "frames_per_clip": args.num_frames,
               "frequency_hz": 2, "clip_duration_s": 4, "cached_layers": 20,
               "extractor_cache_version": candidate.infra.version,
               "gates": GATES, "eval_lag": -5,
@@ -108,15 +120,15 @@ def main():
         torch.cuda.reset_peak_memory_stats()
         started = time.perf_counter()
         count = 0
-        for event, array in zip(events, candidate._get_data(events), strict=True):
+        for event, array in zip(active_events, candidate._get_data(active_events), strict=True):
             timepoints = Frequency(2).to_ind(event.duration)
             assert array.data.shape == (20, 1408, timepoints)
             assert float(array.frequency) == 2
             assert array.duration == Frequency(2).to_sec(timepoints)
             assert np.isfinite(np.asarray(array.data)).all()
             count += 1
-            print("Available candidate events:", count, "/ 60", flush=True)
-        assert count == 60
+            print("Available candidate events:", count, "/", len(active_events), flush=True)
+        assert count == len(active_events)
         torch.cuda.synchronize()
         result["cache_population_elapsed_s"] = time.perf_counter() - started
         result["cache_population_note"] = "Includes cache checks and possible resumed cache hits; not a fresh throughput measurement."
@@ -126,7 +138,7 @@ def main():
         torch.cuda.empty_cache()
         model = xp._model.cuda().eval()
         with torch.inference_mode():
-            for ordinal, (run, n_trs) in enumerate(RUNS.items()):
+            for ordinal, (run, n_trs) in enumerate(scoring_runs):
                 references, predictions = [], []
                 for index in range(ordinal * 10, (ordinal + 1) * 10):
                     batch, entry = batches[index], metadata[index]
@@ -170,10 +182,14 @@ def main():
                 print(run, "mean parcel r delta", mean_delta, "passed", row["passed"], flush=True)
                 args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n")
         result["status"] = "passed" if all(row["passed"] for row in result["runs"]) else "failed"
-        if result["status"] != "passed":
+        passed = result["status"] == "passed"
+        if args.first_movie_only:
+            result["status"] = "screen_" + result["status"]
+        if not passed:
             raise AssertionError("Prespecified brain-score regression margin exceeded")
     except Exception as error:
-        result["status"] = "failed"
+        if result["status"] == "running":
+            result["status"] = "error"
         result["error_type"] = type(error).__name__
         raise
     finally:

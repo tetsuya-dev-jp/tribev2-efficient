@@ -37,6 +37,7 @@ def main():
                             infra={"keep_in_ram": False})
     extractor = EfficientVJEPA2Video(frequency=2, clip_duration=4, image=image, compute_dtype="float16")
     result = {"status": "running", "torch": torch.__version__, "hip": torch.version.hip,
+              "model": image.model_name,
               "transformers": version("transformers"), "neuralset": version("neuralset"),
               "device": torch.cuda.get_device_name(), "model_dtype": "torch.float16",
               "mean_dtype": str(torch.float32), "selection": selection,
